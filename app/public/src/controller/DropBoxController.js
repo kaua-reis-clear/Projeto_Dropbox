@@ -6,22 +6,24 @@ class DropBoxController {
     this.progressBarEl = this.snackModalEl.querySelector(".mc-progress-bar-fg");
     this.nameFileEl = this.snackModalEl.querySelector(".filename");
     this.timeLeftEl = this.snackModalEl.querySelector(".timeleft");
+    this.listFilesEl = document.querySelector('#list-of-files-and-directories');
 
     this.connectFirebase();
     this.initEvents();
+    this.readFiles();
   }
 
   connectFirebase() {
     var config = {
-        apiKey: "AIzaSyBI17D1lLLk9a0XEp-D2n4Dknxcrwdb4xA",
-        authDomain: "dropbox-clone-60894.firebaseapp.com",
-        databaseURL: "https://dropbox-clone-60894-default-rtdb.firebaseio.com",
-        projectId: "dropbox-clone-60894",
-        storageBucket: "dropbox-clone-60894.appspot.com",
-        messagingSenderId: "433916604147",
-        appId: "1:433916604147:web:5d870e19fccdf636dc1186",
-      };
-      firebase.initializeApp(config);
+      apiKey: "AIzaSyBI17D1lLLk9a0XEp-D2n4Dknxcrwdb4xA",
+      authDomain: "dropbox-clone-60894.firebaseapp.com",
+      databaseURL: "https://dropbox-clone-60894-default-rtdb.firebaseio.com",
+      projectId: "dropbox-clone-60894",
+      storageBucket: "dropbox-clone-60894.appspot.com",
+      messagingSenderId: "433916604147",
+      appId: "1:433916604147:web:5d870e19fccdf636dc1186",
+    };
+    firebase.initializeApp(config);
   }
 
   initEvents() {
@@ -30,12 +32,35 @@ class DropBoxController {
     });
 
     this.inputFilesEl.addEventListener("change", (event) => {
-      this.uploadTask(event.target.files);
+      this.btnSendFileEl.disabled = true;
+
+      this.uploadTask(event.target.files)
+        .then((responses) => {
+          responses.forEach((resp) => {
+            console.log(resp.files["input-file"]);
+
+            this.getFirebaseRef().push().set(resp.files["input-file"]);
+          });
+
+          this.uploadComplete();
+        })
+        .catch((err) => {
+          this.uploadComplete();
+          console.log(err);
+        });
 
       this.modalShow();
-
-      this.inputFilesEl.value = "";
     });
+  }
+
+  uploadComplete() {
+    this.modalShow(false);
+    this.inputFilesEl.value = "";
+    this.btnSendFileEl.disabled = false;
+  }
+
+  getFirebaseRef() {
+    return firebase.database().ref("/files");
   }
 
   modalShow(show = true) {
@@ -53,8 +78,6 @@ class DropBoxController {
           ajax.open("POST", "/upload");
 
           ajax.onload = (event) => {
-            this.modalShow(false);
-
             try {
               resolve(JSON.parse(ajax.responseText));
             } catch (e) {
@@ -63,7 +86,6 @@ class DropBoxController {
           };
 
           ajax.onerror = (event) => {
-            this.modalShow(false);
             reject(event);
           };
 
@@ -119,7 +141,7 @@ class DropBoxController {
   }
 
   getFileIconView(file) {
-    switch (file.type) {
+    switch (file.mimetype) {
       case "folder":
         return `
             <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
@@ -171,6 +193,7 @@ class DropBoxController {
 
       case "audio/mp3":
       case "audio/ogg":
+      case "audio/mpeg":
         return `
             <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
                 <title>content-audio-large</title>
@@ -281,12 +304,28 @@ class DropBoxController {
     }
   }
 
-  getFileView(file) {
-    return `
-        <li>
-            ${this.getFileIconView(file)}
-            <div class="name text-center">${file.name}</div>
-        </li>
-        `;
+  getFileView(file, key) {
+    let li = document.createElement('li');
+
+    li.dataset.key = key;
+
+    li.innerHTML = `
+      ${this.getFileIconView(file)}
+      <div class="name text-center">${file.originalFilename}</div>
+    `;
+
+    return li;
+  }
+
+  readFiles() {
+    this.getFirebaseRef().on('value', snapshot => {
+      this.listFilesEl.innerHTML = '';
+      snapshot.forEach(snapshotItem => {
+        let key = snapshotItem.key;
+        let data = snapshotItem.val()
+        
+        this.listFilesEl.appendChild(this.getFileView(data, key))
+      })
+    })
   }
 }
